@@ -1,0 +1,319 @@
+<?php
+
+namespace __autoload;
+/*******************************************/
+$packagesDir = __DIR__ . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . 'PackagesSource';
+/*******************************************/
+const packages = 'packages';
+const version = 'version';
+const versions = 'versions';
+const explicit = 'explicit';
+const defaultVersion = 'defaultVersion';
+const requireFilename = 'require.php';
+function getMaxVersion($dir)
+{
+    $children = scandir($dir, SORT_DESC);
+    $maxVersion = $children[0];
+    return ($maxVersion === '.' || $maxVersion === '..') ? null : $maxVersion;
+}
+
+function includePackage($arrayOfTarget)
+{
+    $packageName = $arrayOfTarget[0];
+    $packageDir = __DIR__ . DIRECTORY_SEPARATOR . $packageName;
+    if (!is_dir($packageDir)) {
+        return false;
+    } else {
+        $trace = debug_backtrace(DEBUG_BACKTRACE_PROVIDE_OBJECT, 4);
+        if (mb_strpos($trace[2]['file'], __DIR__) === 0) {
+            $requirePath = dirname($trace[2]['file']) . DIRECTORY_SEPARATOR . requireFilename;
+            if (is_file($requirePath)) {
+                $require = include $requirePath;
+                if (is_array($require) && key_exists(packages, $require) && key_exists($packageName, $require[packages]) && key_exists(version, $require[packages][$packageName])) {
+                    $version = $require[packages][$packageName][version];
+                }
+            }
+        }
+        if (empty($version)) {
+            $requirePath = __DIR__ . DIRECTORY_SEPARATOR . requireFilename;
+            if (is_file($requirePath)) {
+                $require = include $requirePath;
+                if (is_array($require) && key_exists(packages, $require) && key_exists($packageName, $require[packages]) && key_exists(defaultVersion, $require[packages][$packageName])) {
+                    $version = $require[packages][$packageName][defaultVersion];
+                }
+            }
+            if (empty($version)) {
+                $version = getMaxVersion($packageDir);
+            }
+        }
+        if ($version !== null) {
+            if (!is_dir($packageDir . DIRECTORY_SEPARATOR . $version)) {
+                return false;
+            }
+            include $packageDir . DIRECTORY_SEPARATOR . $version . DIRECTORY_SEPARATOR . implode(DIRECTORY_SEPARATOR, array_slice($arrayOfTarget, 1)) . '.php';
+            return true;
+        }
+        return false;
+    }
+}
+
+spl_autoload_register(function ($class) {
+    return includePackage(explode("\\", $class));
+});
+if (PHP_SAPI === 'cli') {
+    function deleteDir($dir)
+    {
+        scan($dir, function ($path, $isDir) {
+            if ($isDir) {
+                $children = scandir($path);
+                if (count($children) === 2) {
+                    rmdir($path);
+                } else {
+                    deleteDir($path);
+                }
+            } else {
+                unlink($path);
+            }
+        });
+        if (is_dir($dir)) {
+            rmdir($dir);
+        }
+    }
+
+    function copy($source, $target)
+    {
+        if (!is_dir($target)) {
+            mkdir($target, 0777, true);
+        }
+        scan($source, function ($path, $isDir) use ($source, $target) {
+            $newPath = $target . mb_substr($path, mb_strlen($source));
+            if ($isDir) {
+                if (!is_dir($newPath)) {
+                    mkdir($newPath, 0777, true);
+                }
+            } else {
+                \copy($path, $target . mb_substr($path, mb_strlen($source)));
+            }
+        });
+    }
+
+    function scan($dir, $cb, $iteration = true)
+    {
+        if (!is_dir($dir)) {
+            return false;
+        }
+        $children = scandir($dir);
+        foreach ($children as $child) {
+            if ($child !== '.' && $child !== '..') {
+                $childPath = $dir . DIRECTORY_SEPARATOR . $child;
+                $isDir = is_dir($childPath);
+                $cb($childPath, $isDir);
+                if ($isDir && $iteration) {
+                    scan($childPath, $cb, $iteration);
+                }
+            }
+        }
+    }
+
+    function install($packageName, $version = null, $explicit = true)
+    {
+        global $packagesDir;
+        if ($version === null) {
+            $version = getMaxVersion($packagesDir . DIRECTORY_SEPARATOR . $packageName);
+            if ($version === null) {
+                echo 'Empty package ' . $packageName;
+                return false;
+            }
+        }
+        $sourceDir = $packagesDir . DIRECTORY_SEPARATOR . $packageName . DIRECTORY_SEPARATOR . $version;
+        if (!is_dir($sourceDir)) {
+            echo 'No such package ' . $packageName . '@' . $version;
+            return false;
+        }
+        $targetDir = __DIR__ . DIRECTORY_SEPARATOR . $packageName . DIRECTORY_SEPARATOR . $version;
+        deleteDir($targetDir);
+        removeRequire($packageName, $version);
+        deleteDir($targetDir);
+        copy($sourceDir, $targetDir);
+        $sourceRequirePath = $sourceDir . DIRECTORY_SEPARATOR . requireFilename;
+        if (is_file($sourceRequirePath)) {
+            $sourceRequire = include $sourceRequirePath;
+            if (is_array($sourceRequire) && key_exists(packages, $sourceRequire)) {
+                foreach ($sourceRequire[packages] as $_packageName => $_packageConf) {
+                    if (key_exists(version, $_packageConf)) {
+                        install($_packageName, $_packageConf[version], false);
+                    }
+                }
+            }
+        }
+        addRequire($packageName, $version, $explicit);
+        return ['version' => $version];
+    }
+
+    function removeRequire($packageName, $version = null)
+    {
+        $requirePath = __DIR__ . DIRECTORY_SEPARATOR . requireFilename;
+        if (is_file($requirePath)) {
+            $require = include $requirePath;
+            if (is_array($require) && key_exists(packages, $require)) {
+                if (key_exists($packageName, $require[packages])) {
+                    if ($version === null) {
+                        unset($require[packages][$packageName]);
+                    } else {
+                        if (key_exists(versions, $require[packages][$packageName])) {
+                            if (key_exists($version, $require[packages][$packageName][versions])) {
+                                unset($require[packages][$packageName][versions][$version]);
+                            }
+                        }
+                        if (key_exists(defaultVersion, $require[packages][$packageName])) {
+                            if ($require[packages][$packageName][defaultVersion] === $version) {
+                                echo 'Need to modify default version of package:' . $version . "\r\n";
+                            }
+                        }
+                    }
+                }
+                file_put_contents($requirePath, "<?php\r\nreturn " . var_export($require, true) . ';');
+            }
+        }
+    }
+
+    function addRequire($packageName, $version, $explicit)
+    {
+        $requirePath = __DIR__ . DIRECTORY_SEPARATOR . requireFilename;
+        if (!is_file($requirePath)) {
+            $require = [
+                packages => [
+                    $packageName => [
+                        defaultVersion => '',
+                        versions => [
+                            $version => [
+                                explicit => $explicit
+                            ]
+                        ]
+                    ]
+                ]
+            ];
+        } else {
+            $require = include $requirePath;
+            if (is_array($require) && key_exists(packages, $require)) {
+                if (key_exists($packageName, $require[packages])) {
+                    if (!key_exists(defaultVersion, $require[packages][$packageName])) {
+                        $require[packages][$packageName][defaultVersion] = '';
+                    }
+                    if (!key_exists(versions, $require[packages][$packageName])) {
+                        $require[packages][$packageName][versions] = [];
+                    }
+                    if (!key_exists($version, $require[packages][$packageName][versions])) {
+                        $require[packages][$packageName][versions][$version] = [];
+                    }
+                    $require[packages][$packageName][versions][$version][explicit] = $explicit;
+                } else {
+                    $require[packages][$packageName] = [
+                        defaultVersion => '',
+                        versions => [
+                            $version => [
+                                explicit => $explicit
+                            ]
+                        ]
+                    ];
+                }
+            }
+        }
+        file_put_contents($requirePath, "<?php\r\nreturn " . var_export($require, true) . ';');
+    }
+
+    if (empty($packagesDir)) {
+        echo 'Undefined packages dir';
+        exit();
+    }
+    if ($argc >= 2) {
+        if (!in_array($argv[1], ['install', 'require', 'uninstall', 'remove'])) {
+            echo 'Undefined command:' . $argv[1];
+            exit();
+        }
+        if (key_exists(2, $argv)) {
+            $name = $argv[2];
+            switch ($argv[1]) {
+                case 'install':
+                case 'require':
+                    if (is_dir($packagesDir . DIRECTORY_SEPARATOR . $name)) {
+                        $install = install($name, $argc === 4 ? $argv[3] : null);
+                        if ($install !== false) {
+                            echo 'Package ' . $name . '@' . $install['version'] . ' installed successfully';
+                            exit();
+                        }
+                    } else {
+                        echo 'No such dir:' . $packagesDir . DIRECTORY_SEPARATOR . $name;
+                        exit();
+                    }
+                    break;
+                case 'uninstall':
+                case 'remove':
+                    $version = $argc === 4 ? $argv[3] : null;
+                    $dir = __DIR__ . DIRECTORY_SEPARATOR . $name . ($version === null ? null : DIRECTORY_SEPARATOR . $version);
+                    $requirePath = __DIR__ . DIRECTORY_SEPARATOR . requireFilename;
+                    if (is_file($requirePath)) {
+                        $require = include $requirePath;
+                        if (is_array($require) && key_exists(packages, $require)) {
+                            $requirePaths = [];
+                            if ($version === null) {
+                                scan($dir, function ($path, $isDir) use (&$requirePaths) {
+                                    if ($isDir) {
+                                        if (is_file($_requirePath = $path . DIRECTORY_SEPARATOR . requireFilename)) {
+                                            $requirePaths[] = $_requirePath;
+                                        }
+                                    }
+                                }, false);
+                            } else {
+                                if (is_file($_requirePath = $dir . DIRECTORY_SEPARATOR . requireFilename)) {
+                                    $requirePaths[] = $_requirePath;
+                                }
+                            }
+                            foreach ($requirePaths as $_requirePath) {
+                                $_require = include $_requirePath;
+                                if (is_array($_require) && key_exists(packages, $_require)) {
+                                    foreach ($_require[packages] as $_packageName => $_packageConf) {
+                                        if (key_exists(version, $_packageConf)) {
+                                            if (key_exists($_packageName, $require[packages])) {
+                                                if (key_exists(defaultVersion, $require[packages][$_packageName])) {
+                                                    $_defaultVersion = $require[packages][$_packageName][defaultVersion];
+                                                    if ($_defaultVersion !== $_packageConf[version]) {
+                                                        if (key_exists(versions, $require[packages][$_packageName])) {
+                                                            if (key_exists($_packageConf[version], $require[packages][$_packageName][versions])) {
+                                                                if (key_exists(explicit, $require[packages][$_packageName][versions][$_packageConf[version]])) {
+                                                                    if ($require[packages][$_packageName][versions][$_packageConf[version]][explicit] === false) {
+                                                                        echo 'It is recommended to exec:php autoload.php remove ' . $_packageName . ' ' . $_packageConf[version] . "\r\n";
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    deleteDir($dir);
+                    removeRequire($name, $version);
+
+                    echo 'Package ' . $name . ($version === null ? '' : '@' . $version) . ' removed successfully';
+                    exit();
+                    break;
+                default:
+                    echo "No such command:" . $argv[1];
+                    exit();
+            }
+        } else {
+            echo 'No package provided';
+            exit();
+        }
+
+    } else {
+        echo 'No command provided';
+        exit();
+    }
+}
