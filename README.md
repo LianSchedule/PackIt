@@ -13,11 +13,11 @@
 #### 常用命令
 
 - 安装
-  - php pack install packageName (自动安装最高版本的包)
-  - php pack install packageName 1.0.0
+  - `php pack install package1` (自动安装最高版本的包)
+  - `php pack install package1 1.0.0`
 - 卸载
-  - php pack uninstall packageName (移除所有版本的该包)
-  - php pack uninstall packageName 1.0.0 (仅移除指定版本的该包)
+  - `php pack uninstall package2` (移除所有版本的该包)
+  - `php pack uninstall package2 1.0.0` (仅移除指定版本的该包)
 
 #### 本地包资源目录的结构
 
@@ -40,6 +40,8 @@
 
 #### 资源包的命名空间
 
+同一文件、不同版本的命名空间保持一致
+
 ```php
 file:package1/1.0/A/B.php
 namespace package1\A;
@@ -50,11 +52,11 @@ namespace package1\A;
 
 #### 包中`require.php`的格式
 
-**当A包中引用了B包时，建议在该文件中指明引用的B包的版本：**
+当A包中引用了B包时，建议在该文件`A/1.0/require.php`中指明引用的B包的版本：
 
 - 在安装A包时，将自动安装所需的B包
 - 在A包中调用B包时，将自动include该版本的B包文件
-- 在移除A包时，如果B包未显式安装，将提示您移除B包
+- 在移除A包时，如果B包未显式安装，将自动提示您移除B包
 
 ```php
 //file:A/1.0/require.php
