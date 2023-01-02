@@ -6,9 +6,10 @@
 
 #### 开始使用
 
-- 在项目包目录执行`wget https://raw.githubusercontent.com/LianSchedule/PackIt/master/dist/pack -O pack`
-- 指定本地包资源目录`$packagesDir`[pack文件]
-- `include_once pack`
+- 在项目的包目录执行`wget https://raw.githubusercontent.com/LianSchedule/PackIt/master/dist/pack -O pack`下载`pack`文件
+- 指定本地包资源目录`$packagesDir`[pack文件]，在项目安装包时将从此目录获取
+- 在项目的入口文件`include`刚才下载的`pack`文件
+- 执行命令安装需要的包
 
 #### 常用命令
 
