@@ -1,7 +1,7 @@
 <?php
-
 namespace __autoload;
 /*******************************************/
+#https://github.com/LianSchedule/PackIt
 $packagesDir = __DIR__ . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . 'PackagesSource';
 /*******************************************/
 const packages = 'packages';
