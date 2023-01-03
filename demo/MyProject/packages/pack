@@ -130,7 +130,7 @@ if (PHP_SAPI === 'cli') {
         }
         $sourceDir = $packagesDir . DIRECTORY_SEPARATOR . $packageName . DIRECTORY_SEPARATOR . $version;
         if (!is_dir($sourceDir)) {
-            echo 'No such package ' . $packageName . '@' . $version;
+            echo 'No such package ' . $packageName . '@' . $version."\r\n";
             return false;
         }
         $targetDir = __DIR__ . DIRECTORY_SEPARATOR . $packageName . DIRECTORY_SEPARATOR . $version;
