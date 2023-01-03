@@ -115,8 +115,11 @@ if (PHP_SAPI === 'cli') {
         }
     }
 
-    function install($packageName, $version = null, $explicit = true)
+    function install($packageName, $version = null, $explicit = true,$installed=[])
     {
+        if(key_exists($packageName,$installed)&&in_array($version,$installed[$packageName])){
+            return false;
+        }
         global $packagesDir;
         if ($version === null) {
             $version = getMaxVersion($packagesDir . DIRECTORY_SEPARATOR . $packageName);
@@ -136,12 +139,18 @@ if (PHP_SAPI === 'cli') {
         deleteDir($targetDir);
         copy($sourceDir, $targetDir);
         $sourceRequirePath = $sourceDir . DIRECTORY_SEPARATOR . requireFilename;
+        if(!key_exists($packageName,$installed)){
+            $installed[$packageName]=[];
+        }
+        if(!in_array($version,$installed[$packageName])){
+            $installed[$packageName][]=$version;
+        }
         if (is_file($sourceRequirePath)) {
             $sourceRequire = include $sourceRequirePath;
             if (is_array($sourceRequire) && key_exists(packages, $sourceRequire)) {
                 foreach ($sourceRequire[packages] as $_packageName => $_packageConf) {
                     if (key_exists(version, $_packageConf)) {
-                        install($_packageName, $_packageConf[version], false);
+                        install($_packageName, $_packageConf[version], false,$installed);
                     }
                 }
             }
@@ -241,7 +250,7 @@ if (PHP_SAPI === 'cli') {
                 case 'install':
                 case 'require':
                     if (is_dir($packagesDir . DIRECTORY_SEPARATOR . $name)) {
-                        $install = install($name, $argc === 4 ? $argv[3] : null);
+                        $install = install($name, $argc === 4 ? $argv[3] : null,true);
                         if ($install !== false) {
                             echo 'Package ' . $name . '@' . $install['version'] . ' installed successfully';
                             exit();
