@@ -60,7 +60,7 @@ function includePackage($arrayOfTarget)
 spl_autoload_register(function ($class) {
     return includePackage(explode("\\", $class));
 });
-if (PHP_SAPI === 'cli') {
+if (PHP_SAPI === 'cli'&&getcwd()===__DIR__) {
     function deleteDir($dir)
     {
         scan($dir, function ($path, $isDir) {
